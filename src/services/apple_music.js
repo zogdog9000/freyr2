@@ -129,26 +129,59 @@ export default class AppleMusic {
     return this.parseURI(uri).type;
   }
 
-  parseURI(uri, storefront) {
-    const match = uri.match(AppleMusic[symbols.meta].VALID_URL);
-    if (!match) return null;
-    const isURI = !!match[4];
-    const parsedURL = xurl.parse(uri, true);
-    const collection_type = isURI ? match[4] : match[2] === 'song' ? 'track' : match[2];
-    const id = isURI ? match[5] : parsedURL.query.i || path.basename(parsedURL.pathname);
-    const type = isURI ? match[4] : collection_type == 'album' && parsedURL.query.i ? 'track' : collection_type;
-    const scope = collection_type == 'track' || (collection_type == 'album' && parsedURL.query.i) ? 'song' : collection_type;
-    storefront = match[1] || storefront || (#store in this ? this.#store.defaultStorefront : null) || 'us';
-    return {
-      id,
-      type,
-      key: match[3] || null,
-      uri: `apple_music:${type}:${id}`,
-      url: `https://music.apple.com/${storefront}/${scope}/${id}`,
-      storefront,
-      collection_type,
-    };
+parseURI(uri, storefront) {
+  const match = uri.match(AppleMusic[symbols.meta].VALID_URL);
+  if (!match) return null;
+
+  const isURI = !!match[4];
+
+  // Manually extract pathname and query without using url or URL
+  const queryIndex = uri.indexOf('?');
+  const pathEndIndex = queryIndex !== -1 ? queryIndex : uri.length;
+  const pathname = uri.slice(0, pathEndIndex).replace(/^https?:\/\/[^/]+/, '');
+  const queryString = queryIndex !== -1 ? uri.slice(queryIndex + 1) : '';
+
+  const query = {};
+  if (queryString) {
+    for (const pair of queryString.split('&')) {
+      const [key, value] = pair.split('=');
+      query[decodeURIComponent(key)] = decodeURIComponent(value || '');
+    }
   }
+
+  const collection_type = isURI
+    ? match[4]
+    : match[2] === 'song'
+    ? 'track'
+    : match[2];
+
+  const id = isURI
+    ? match[5]
+    : query.i || pathname.split('/').filter(Boolean).pop();
+
+  const type = isURI
+    ? match[4]
+    : collection_type === 'album' && query.i
+    ? 'track'
+    : collection_type;
+
+  const scope = collection_type === 'track' || (collection_type === 'album' && query.i)
+    ? 'song'
+    : collection_type;
+
+  storefront = match[1] || storefront || (#store in this ? this.#store.defaultStorefront : null) || 'us';
+
+  return {
+    id,
+    type,
+    key: match[3] || null,
+    uri: `apple_music:${type}:${id}`,
+    url: `https://music.apple.com/${storefront}/${scope}/${id}`,
+    storefront,
+    collection_type,
+  };
+}
+
 
   wrapTrackMeta(trackInfo, albumInfo = {}) {
     return {
